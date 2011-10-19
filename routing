@@ -1,0 +1,63 @@
+echo 1 > /proc/sys/net/ipv4/ip_forward
+#
+# Prevent SYN floods from consuming memory resources:
+#
+ echo 1 > /proc/sys/net/ipv4/tcp_syncookies
+#
+# Prevents anything coming in to firewall and lets only 
+# all packets out
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+#
+# Flush (-F) all specific rules
+#
+iptables -F INPUT 
+iptables -F FORWARD 
+iptables -F OUTPUT 
+iptables -F -t nat
+
+#iptables -A OUTPUT -p tcp --dport 80 --syn -m state --state NEW -j ACCEPT
+#iptables -A OUTPUT -o lo -j ACCEPT
+#iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+#iptables -A FORWARD -p tcp --dport 80 --syn -m state --state NEW -j ACCEPT
+#iptables -t nat -A PREROUTING -p tcp --dport 80 -i eth0 -j DNAT --to-destination 10.1.10.18:8080
+#iptables -t nat -A POSTROUTING -s 192.168.1.0/24 -o eth1 -j MASQUERADE
+
+#
+# Forward all packets from eth1 (internal network) to eth0 (the internet).
+#
+iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+iptables -A FORWARD -i eth0 -o eth1 -j ACCEPT
+
+#
+# Forward packets that are part of existing and related connections from eth0 to eth1.
+#
+iptables -A FORWARD -i eth0 -o eth1 -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i eth1 -o eth0 -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+#
+# Permit packets in to firewall itself that are part of existing and related connections.
+#
+iptables -A INPUT -i eth1 -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -i eth0 -m state --state ESTABLISHED,RELATED -j ACCEPT
+# Allow all inputs to firewall from the internal network and local interfaces# Enable SNAT functionality on eth0
+#
+# SNAT (Source NAT) is used to map private source IP numbers of
+# interfaces on the internal LAN to one of my public static IP numbers.
+# SNAT performs this mapping when a client running on one of the
+# internal hosts (x.y.z.c) initiates a TCP connection (SYN) through
+# eth0.
+#
+### you have " iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source 1.2.3.4" you left off the "-s 192.168.0.0/24"
+#iptables -A POSTROUTING -t nat -s 192.168.1.0/24 -o eth0 -j SNAT --to-source 10.2.32.131
+iptables -A POSTROUTING -t nat -s 192.168.1.0/24 -o eth1 -j SNAT --to-source 10.2.32.131
+#
+iptables -A INPUT -i eth1 -s 0/0 -d 0/0 -j ACCEPT
+iptables -A INPUT -i eth0 -s 0/0 -d 0/0 -j ACCEPT
+iptables -A INPUT -i lo -s 0/0 -d 0/0 -j ACCEPT
+
+
+iptables -t nat -A PREROUTING -p tcp --dport 80 -i eth0 -j DNAT --to-destination 192.168.1.1:3128
+#iptables -t nat -A PREROUTING -p tcp --dport 443 -i eth0 -j DNAT --to-destination 10.11.12.24:3128
+iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE
